@@ -1,4 +1,5 @@
 #include <cstring>
+#include "merkle_tree.hh"
 
 using namespace std;
 
