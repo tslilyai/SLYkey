@@ -4,13 +4,12 @@ Package app defines a new application server and registers endpoints.
 package app
 
 import (
-	"flag"
-	"fmt"
-	"html/template"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/stretchr/graceful"
+	"github.com/thumbtack/kiki/handlers"
 )
 
 // App defines the interface for an application
@@ -33,14 +32,11 @@ func NewApp() (App, error) {
 		},
 		Timeout: time.Duration(serverTimeout) * time.Millisecond,
 	}
-	a.handler.Handle("/endpoint", handlers.HealthHandler(/*args here*/))
-}	return a, nil
+	a.handler.Handle("/endpoint", handlers.HealthHandler( /*args here*/ ))
+	return a, nil
 }
 
 // Run runs the application
 func (a *app) Run() error {
-	for _, statsd := range a.statsdClients {
-		defer statsd.Close()
-	}
 	return a.server.ListenAndServe()
 }

@@ -5,7 +5,8 @@ import "container/list"
 type TransType int
 
 const (
-	Register TransType = 1 + iota
+	NumTransactions           = 5
+	Register        TransType = 1 + iota
 	Update
 )
 
@@ -17,10 +18,11 @@ type Transaction struct {
 }
 
 type Block struct {
-	Type        TransType
-	Email       string
-	SeqNum      int
-	ProofOfWork int
+	Type         TransType
+	Transactions [NumTransactions]Transaction
+	Email        string
+	SeqNum       int
+	ProofOfWork  int
 }
 
 var BlockChain *list.List
