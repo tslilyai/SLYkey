@@ -5,11 +5,9 @@ package app
 
 import (
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/stretchr/graceful"
-	"github.com/thumbtack/kiki/handlers"
 )
 
 // App defines the interface for an application
@@ -24,15 +22,15 @@ type app struct {
 
 // NewApp returns a new application
 func NewApp() (App, error) {
-	a.setupServer()
+	a := app{}
 	a.server = &graceful.Server{
 		Server: &http.Server{
-			Addr:    ":" + strconv.Itoa(port),
+			Addr:    ":80",
 			Handler: a.handler,
 		},
-		Timeout: time.Duration(serverTimeout) * time.Millisecond,
+		Timeout: time.Duration(500 * time.Millisecond,
 	}
-	a.handler.Handle("/endpoint", handlers.HealthHandler( /*args here*/ ))
+	a.handler.Handle("/endpoint" /* handler here */)
 	return a, nil
 }
 
