@@ -4,7 +4,6 @@ type TransType int
 
 const (
 	CASig                     = "signature of CA"
-	NumTransactions           = 5
 	Register        TransType = 1 + iota
 	Update
 )

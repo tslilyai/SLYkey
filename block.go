@@ -1,16 +1,12 @@
 package main
 
-import "container/list"
-
 type Block struct {
-	Type         TransType
-	Transactions [NumTransactions]Transaction
-	Email        string
-	SeqNum       int
-	ProofOfWork  int
+	Transactions []Transaction
+	SeqNum       uint64
+	ProofOfWork  uint64
 }
 
-var BlockChain *list.List
+var BlockChain map[uint64]Block
 
 // maps from email to public key
 var Database map[string]string
