@@ -11,7 +11,7 @@ func main() {
 	log.Println("Welcome to SLYcoin!")
 	flag.Parse()
 
-	app, err := app.NewApp(envVars)
+	app, err := app.NewApp()
 	if err != nil {
 		log.Fatal(err)
 	}
