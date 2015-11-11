@@ -88,7 +88,7 @@ func (ns *NodeServer) StartRPCServer(addr string) bool {
 	go func(addr string) {
 		for ns.isdead() == false {
 			// XXX what is l?
-			conn, err := ns.l.Accept()
+			conn, err := l.Accept()
 			if err == nil && ns.isdead() == false {
 				go rpcs.ServeConn(conn)
 			} else if err == nil {
