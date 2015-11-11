@@ -22,7 +22,7 @@ type app struct {
 
 // NewApp returns a new application
 func NewApp() (App, error) {
-	a := app{}
+	a := &app{}
 	a.server = &graceful.Server{
 		Server: &http.Server{
 			Addr:    ":80",
@@ -30,7 +30,7 @@ func NewApp() (App, error) {
 		},
 		Timeout: time.Duration(500 * time.Millisecond),
 	}
-	a.handler.Handle("/endpoint" /* handler here */)
+	//	a.handler.Handle("/endpoint" /* handler here */)
 	return a, nil
 }
 

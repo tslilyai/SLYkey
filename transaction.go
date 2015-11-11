@@ -1,6 +1,9 @@
 package main
 
-import "crypto/rsa"
+import (
+	"crypto/rsa"
+	"fmt"
+)
 
 type TransType int
 
@@ -17,7 +20,7 @@ type Transaction struct {
 	Signature string
 }
 
-func GetPublicKey(string email) rsa.PublicKey {
+func GetPublicKey(email string) rsa.PublicKey {
 	return Database[email]
 }
 
@@ -26,7 +29,7 @@ func GetPublicKey(string email) rsa.PublicKey {
 func RegisterPublicKey(key rsa.PublicKey, email string) error {
 	// value already in map, don't reregister
 	if _, ok := Database[email]; ok {
-		return error("You have already registered for a public key")
+		return fmt.Errorf("You have already registered for a public key")
 	}
 	trans := &Transaction{
 		Type:      Register,
@@ -34,7 +37,6 @@ func RegisterPublicKey(key rsa.PublicKey, email string) error {
 		PublicKey: key,
 		Signature: CASig,
 	}
-	addToBlock(trans)
 	// XXX we want to broadcast this somehow and have other nodes (including us) add this transaction to their blocks
 	// we also want to add this to our "block" that we're working on?
 	return nil

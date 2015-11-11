@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
+	"log"
 	"net"
 	"net/rpc"
-	"log"
 	"os"
+	"syscall"
 )
 
 // RPCCall helper function:
@@ -21,7 +23,7 @@ import (
 //   args Arg{}
 //   reply Reply{}
 //   err := RPCCall("/tmp/slycoin-server1.sock", "ns.ReceiveBlock", args, &reply)
-func RPCCall (remote string, name string, args interface{}, reply interface{}) bool {
+func RPCCall(remote string, name string, args interface{}, reply interface{}) bool {
 	c, err := rpc.Dial("unix", remote)
 	if err != nil {
 		err1 := err.(*net.OpError)
@@ -44,7 +46,8 @@ func RPCCall (remote string, name string, args interface{}, reply interface{}) b
 // XXX assuming we will have a isdead() method to tell rpc when to stop
 // using unix domain socket for RPC right now
 // ** Call this function upon NodeServer initialization **
-func (ns *NodeServer)StartRPCServer(addr string) bool {
+// XXX nodeserver isn't defined?
+func (ns *NodeServer) StartRPCServer(addr string) bool {
 	rpcs := rpc.NewServer()
 	rpcs.Register(ns)
 
@@ -60,6 +63,7 @@ func (ns *NodeServer)StartRPCServer(addr string) bool {
 	go func(addr string) {
 		for ns.isdead() == false {
 			conn, err := ns.l.Accept()
+			// XXX px isn't defined?
 			if err == nil && px.isdead() == false {
 				go rpcs.ServeConn(conn)
 			} else if err == nil {
@@ -70,4 +74,6 @@ func (ns *NodeServer)StartRPCServer(addr string) bool {
 			}
 		}
 	}(addr)
+
+	return true
 }
