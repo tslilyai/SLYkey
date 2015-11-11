@@ -9,6 +9,32 @@ import (
 	"syscall"
 )
 
+const (
+	ErrOK =       "OK"
+	ErrFound =    "Found"
+	ErrNotFound = "404"
+	ErrRejected = "Rejected"
+)
+
+// RPC argument/response format
+type RequestBlockArgs struct {
+	SeqNum uint64
+	// more fields?
+}
+
+type RequestBlockReply struct {
+	Status string
+	Block  Block
+}
+
+type SendBlockArgs struct {
+	Block Block
+}
+
+type SendBlockReply struct {
+	Status string
+}
+
 // RPCCall helper function:
 // Does what the name says :)
 // Parameters:
@@ -63,8 +89,7 @@ func (ns *NodeServer) StartRPCServer(addr string) bool {
 	go func(addr string) {
 		for ns.isdead() == false {
 			conn, err := ns.l.Accept()
-			// XXX px isn't defined?
-			if err == nil && px.isdead() == false {
+			if err == nil && ns.isdead() == false {
 				go rpcs.ServeConn(conn)
 			} else if err == nil {
 				conn.Close()

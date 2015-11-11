@@ -3,10 +3,81 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"sync"
+	"sync/atomic"
+	"log"
 	"fmt"
 )
 
+const (
+	MAX_PEERS = 64
+)
+
 // XXX define nodeserver here?
+type NodeServer struct {
+	qMu         sync.Mutex // mutex for BlockQueue
+	mMu         sync.Mutex // mutex for block chain (map)
+	dead        int32
+	rpcListener net.Listener
+	peers       []string
+	blkQueue    BlockQueue
+}
+
+// addr: local address?
+// peers: bunch of other servers?
+// XXX should call StartRPCServer, NewBlockQueue, etc.
+func NewNodeServer(addr string, peers []string) *NodeServer {}
+
+func (ns *nodeServer) isdead() bool {
+	return atomic.LoadInt32(&ns.dead) != 0
+}
+
+func (ns *nodeServer) Shutdown() {
+	atomic.StoreInt32(&ns.dead, 1)
+}
+
+// RPC methods here!!
+func (ns *NodeServer) SendBlock(remote string, block Block) bool {
+	args := SendBlockArgs{}
+	reply := SendBlockReply{}
+	args.Block = block
+	ok := RPCCall(remote, "ns.RecvIncomingBlock", args, &reply)
+	return ok
+}
+
+func (ns *NodeServer) RecvIncomingBlock(args *SendBlockArgs, reply *SendBlockReply) error {
+	ns.qMu.Lock()
+	defer ns.qMu.Unlock()
+
+	if blkQueue.Count() >= MAX_QUEUE {
+		// discard incoming blocks if our queue is full
+		return nil
+	}
+
+	blkQueue.Push(args.Block)
+	reply.Status = ErrOK
+	return nil
+}
+
+func (ns *NodeServer) RequestBlock(remote string, seqNum uint64) bool, Block {
+	args := RequestBlockArgs{}
+	reply := RequestBlockReply{}
+	args.SeqNum = seqNum
+	ok := RPCCall(remote, "ns.RemoteBlockLookup", args, &reply)
+	if ok && reply.Status == ErrFound {
+		return true, reply.Block
+	} else {
+		return false, Block{}
+	}
+}
+
+func (ns *NodeServer) RemoteBlockLookup(args *RequestBlockArgs, reply *RequestBlockReply) error {
+	// XXX we need a mutex (called mMu right now) for the block chain
+	ns.mMu.Lock()
+	defer ns.mMu.Unlock()
+
+	// XXX lookup args.SeqNum in the block chain
+}
 
 // process computes the proof of work and then broadcasts the block
 // XXX drop block if we receive another block?
