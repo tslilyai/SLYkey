@@ -1,5 +1,7 @@
 package main
 
+import "crypto/rsa"
+
 const numTrans = 5
 
 type Block struct {
@@ -10,7 +12,7 @@ type Block struct {
 
 var BlockChain map[uint64]Block
 var CurrentBlock Block
-var Database map[string]string
+var Database map[string]rsa.PublicKey
 
 // add a transaction to a block, beginning work on a block if the block becomes full
 func addToBlock(t Transaction) {
