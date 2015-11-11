@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	ErrOK =       "OK"
-	ErrFound =    "Found"
+	ErrOK       = "OK"
+	ErrFound    = "Found"
 	ErrNotFound = "404"
 	ErrRejected = "Rejected"
 )
@@ -72,7 +72,6 @@ func RPCCall(remote string, name string, args interface{}, reply interface{}) bo
 // XXX assuming we will have a isdead() method to tell rpc when to stop
 // using unix domain socket for RPC right now
 // ** Call this function upon NodeServer initialization **
-// XXX nodeserver isn't defined?
 func (ns *NodeServer) StartRPCServer(addr string) bool {
 	rpcs := rpc.NewServer()
 	rpcs.Register(ns)
@@ -88,6 +87,7 @@ func (ns *NodeServer) StartRPCServer(addr string) bool {
 	// Start RPC listener thread
 	go func(addr string) {
 		for ns.isdead() == false {
+			// XXX what is l?
 			conn, err := ns.l.Accept()
 			if err == nil && ns.isdead() == false {
 				go rpcs.ServeConn(conn)

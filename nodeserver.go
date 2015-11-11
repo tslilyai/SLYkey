@@ -3,17 +3,16 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"fmt"
+	"net"
 	"sync"
 	"sync/atomic"
-	"log"
-	"fmt"
 )
 
 const (
 	MAX_PEERS = 64
 )
 
-// XXX define nodeserver here?
 type NodeServer struct {
 	qMu         sync.Mutex // mutex for BlockQueue
 	mMu         sync.Mutex // mutex for block chain (map)
@@ -28,11 +27,11 @@ type NodeServer struct {
 // XXX should call StartRPCServer, NewBlockQueue, etc.
 func NewNodeServer(addr string, peers []string) *NodeServer {}
 
-func (ns *nodeServer) isdead() bool {
+func (ns *NodeServer) isdead() bool {
 	return atomic.LoadInt32(&ns.dead) != 0
 }
 
-func (ns *nodeServer) Shutdown() {
+func (ns *NodeServer) Shutdown() {
 	atomic.StoreInt32(&ns.dead, 1)
 }
 
@@ -49,6 +48,7 @@ func (ns *NodeServer) RecvIncomingBlock(args *SendBlockArgs, reply *SendBlockRep
 	ns.qMu.Lock()
 	defer ns.qMu.Unlock()
 
+	// XXX where is blkqueue?
 	if blkQueue.Count() >= MAX_QUEUE {
 		// discard incoming blocks if our queue is full
 		return nil
@@ -59,7 +59,7 @@ func (ns *NodeServer) RecvIncomingBlock(args *SendBlockArgs, reply *SendBlockRep
 	return nil
 }
 
-func (ns *NodeServer) RequestBlock(remote string, seqNum uint64) bool, Block {
+func (ns *NodeServer) RequestBlock(remote string, seqNum uint64) (bool, Block) {
 	args := RequestBlockArgs{}
 	reply := RequestBlockReply{}
 	args.SeqNum = seqNum

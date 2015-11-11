@@ -31,15 +31,16 @@ func (bq *BlockQueue) Count() uint64 {
 
 func (bq *BlockQueue) Push(b Block) {
 	if bq.head == bq.tail && bq.count > 0 {
-		realloc := make([]Block, len(bq.queue) + bq.size)
+		realloc := make([]Block, uint64(len(bq.queue))+bq.size)
 		copy(realloc, bq.queue[bq.head:])
-		copy(realloc[len(bq.queue) - bq.head:], bq.queue[:bq.head])
+		copy(realloc[uint64(len(bq.queue))-bq.head:], bq.queue[:bq.head])
 		bq.head = 0
-		bq.tail = len(bq.queue)
+		bq.tail = uint64(len(bq.queue))
 		bq.queue = realloc
 	}
+	// XXX what is n????
 	bq.queue[bq.tail] = n
-	bq.tail = (bq.tail + 1) % len(bq.queue)
+	bq.tail = (bq.tail + 1) % uint64(len(bq.queue))
 	bq.count++
 }
 
@@ -47,8 +48,8 @@ func (bq *BlockQueue) Pop() Block {
 	if bq.count == 0 {
 		return Block{}
 	}
-	b := q.queue[q.head]
-	q.head = (q.head + 1) % len(q.queue)
-	q.count--
+	b := bq.queue[bq.head]
+	bq.head = (bq.head + 1) % uint64(len(bq.queue))
+	bq.count--
 	return b
 }
