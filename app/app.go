@@ -28,7 +28,7 @@ func NewApp() (App, error) {
 			Addr:    ":80",
 			Handler: a.handler,
 		},
-		Timeout: time.Duration(500 * time.Millisecond,
+		Timeout: time.Duration(500 * time.Millisecond),
 	}
 	a.handler.Handle("/endpoint" /* handler here */)
 	return a, nil
