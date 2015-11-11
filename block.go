@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"fmt"
 )
 
 const numTrans = 5
@@ -15,12 +16,20 @@ type Block struct {
 }
 
 var (
-	BlockChain   map[uint64]Block
 	CurrentBlock = Block{
 		Transactions: nil,
-		SeqNum:       0,
+		SeqNum:       1,
 		ProofOfWork:  0,
 		Hash:         0,
+	}
+	// initialize all blockchains with currentblock of seqnum 0
+	BlockChain map[uint64]Block = map[uint64]Block{
+		0: Block{
+			Transactions: nil,
+			SeqNum:       0,
+			ProofOfWork:  0,
+			Hash:         0,
+		},
 	}
 )
 
@@ -47,10 +56,7 @@ func process(b *Block) error {
 
 // compute and set the proof of work and hash of the block
 func setProofOfWork(b *Block) {
-	chainHash := uint64(0)
-	if b.SeqNum != 0 {
-		chainHash = BlockChain[b.SeqNum-1].Hash
-	}
+	chainHash := BlockChain[b.SeqNum-1].Hash
 	// resulting hash must begin with 28 zeros
 	target := uint64(^uint64(0) >> 28)
 	buf := make([]byte, 16)
@@ -85,6 +91,23 @@ func request(seqNum uint64) *Block {
 // also validates by checking that the block's parent's hash matches
 // the hash of the parent (seqNum - 1)
 func validate(b *Block) error {
+	// VALIDATE BLOCK'S HASH
+	buf := make([]byte, 16)
+	binary.PutUvarint(buf, BlockChain[b.SeqNum-1].Hash+b.ProofOfWork)
+	target := uint64(^uint64(0) >> 28)
+	checksum := sha256.Sum256(buf)
+	hash := binary.BigEndian.Uint64(checksum[0:32])
+	// ensure checksum begins with 28 0s
+	if hash > target {
+		return fmt.Errorf("invalid proof of work, hash does not begin with 28 0s")
+	}
+	// ensure that block hash matches hash of parent + proof of work
+	if hash != b.Hash {
+		return fmt.Errorf("hash does not match that of parent")
+	}
+
+	// VALIDATE WITH RESPECT TO BLOCK CHAIN
+	// TODO
 	return nil
 }
 
