@@ -76,6 +76,7 @@ func (ns *NodeServer) StartRPCServer(addr string) bool {
 	rpcs := rpc.NewServer()
 	rpcs.Register(ns)
 
+	// XXX why are we removing this??
 	os.Remove(addr)
 	l, e := net.Listen("unix", addr)
 	if e != nil {

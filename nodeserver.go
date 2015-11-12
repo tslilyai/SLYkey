@@ -25,7 +25,13 @@ type NodeServer struct {
 // addr: local address?
 // peers: bunch of other servers?
 // XXX should call StartRPCServer, NewBlockQueue, etc.
-func NewNodeServer(addr string, peers []string) *NodeServer {}
+func NewNodeServer(addr string, peers []string) *NodeServer {
+	ns := &NodeServer{
+		// initialize fields here
+		blkQueue: NewBlockQueue()
+	}
+	ns.StartRPCServer(addr)
+}
 
 func (ns *NodeServer) isdead() bool {
 	return atomic.LoadInt32(&ns.dead) != 0
@@ -48,13 +54,12 @@ func (ns *NodeServer) RecvIncomingBlock(args *SendBlockArgs, reply *SendBlockRep
 	ns.qMu.Lock()
 	defer ns.qMu.Unlock()
 
-	// XXX where is blkqueue?
-	if blkQueue.Count() >= MAX_QUEUE {
+	if ns.blkQueue.Count() >= MAX_QUEUE {
 		// discard incoming blocks if our queue is full
 		return nil
 	}
 
-	blkQueue.Push(args.Block)
+	ns.blkQueue.Push(args.Block)
 	reply.Status = ErrOK
 	return nil
 }
