@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
@@ -65,9 +67,9 @@ func setProofOfWork(b *Block) {
 	b.Hash = hash
 }
 
+// verify proof of work
+// check that the block's parent's hash matches the hash of the parent block (seqNum - 1)
 // validate block with respect to the block chain
-// also validates by checking that the block's parent's hash matches
-// the hash of the parent (seqNum - 1)
 func validate(b *Block) error {
 	// VALIDATE BLOCK'S HASH
 	buf := make([]byte, 16)
@@ -84,7 +86,42 @@ func validate(b *Block) error {
 		return fmt.Errorf("hash does not match that of parent")
 	}
 
-	// VALIDATE WITH RESPECT TO BLOCK CHAIN
-	// TODO
+	// VALIDATE WITH RESPECT TO BLOCK CHAIN by finding the most recent transaction pertaining to the user,
+	// checking the signature with the transaction to be added or verifying the CASig if there has been no
+	// user-made transaction thus far.
+	var lastTxn Transaction
+	for _, txn := range b.Transactions {
+		// get most recent block
+		found := false
+		for i := len(BlockChain); i > 0; i-- {
+			for _, t := range b.Transactions {
+				if t.Email == txn.Email {
+					lastTxn = t
+					found = true
+				}
+			}
+			if found {
+				break
+			}
+		}
+		// did not find previous transaction of this user
+		// must be a registration and signed by the CA
+		if !found {
+			if txn.Type != Register {
+				return fmt.Errorf("Cannot update a nonexistent public key")
+			}
+			if !bytes.Equal(txn.Signature, CASig) {
+				return fmt.Errorf("Not signed by the CA")
+			}
+			return nil
+		}
+		// else this is an update
+		if err := rsa.VerifyPKCS1v15(&lastTxn.PublicKey, 0, []byte{}, lastTxn.Signature); err != nil {
+			if txn.Type != Update {
+				return fmt.Errorf("Cannot register if you already are in the database")
+			}
+			return fmt.Errorf("Signature on new transaction does not match")
+		}
+	}
 	return nil
 }
