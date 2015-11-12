@@ -37,7 +37,10 @@ func RegisterPublicKey(key rsa.PublicKey, email string) error {
 		PublicKey: key,
 		Signature: CASig,
 	}
+	// how to implement?
 	// XXX we want to broadcast this somehow and have other nodes (including us) add this transaction to their blocks
 	// we also want to add this to our "block" that we're working on?
+	trans.SendTransaction()
+
 	return nil
 }

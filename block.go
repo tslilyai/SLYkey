@@ -28,6 +28,7 @@ var (
 )
 
 // add a transaction to a block, beginning work on a block if the block becomes full
+// XXX or if the node is not currently working on a block
 func addToBlock(b *Block, t Transaction) {
 	if len(b.Transactions) == numTrans {
 		block := CurrentBlock
