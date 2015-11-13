@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bytes"
+	"crypto"
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/binary"
@@ -110,7 +110,8 @@ func validate(b *Block) error {
 			if txn.Type != Register {
 				return fmt.Errorf("Cannot update a nonexistent public key")
 			}
-			if !bytes.Equal(txn.Signature, CASig) {
+			// verify the CA signed this request
+			if err := rsa.VerifyPKCS1v15(&CAKey, crypto.SHA256, []byte(txn.Email), txn.Signature); err != nil {
 				return fmt.Errorf("Not signed by the CA")
 			}
 			return nil

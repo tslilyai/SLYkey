@@ -1,16 +1,22 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rsa"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"log"
+	"math/big"
+	"net/http"
 )
 
 type TransType int
 
 type Transaction struct {
-	Type      TransType
-	Email     string
-	PublicKey rsa.PublicKey
+	Type      TransType     `json:"type"`
+	Email     string        `json:"email"`
+	PublicKey rsa.PublicKey `json:"public_key"`
 	Signature []byte
 }
 
@@ -21,7 +27,12 @@ const (
 
 var (
 	Database map[string]rsa.PublicKey
-	CASig    = []byte("signature of CA")
+	// XXX need to have actual key
+	CAKey = rsa.PublicKey{
+		N: big.NewInt(3),
+		E: 3,
+	}
+	CAurl = "https://ca.com/register"
 )
 
 func updateDatabase(b *Block) {
@@ -42,11 +53,28 @@ func RegisterPublicKey(key rsa.PublicKey, email string) error {
 	if _, ok := Database[email]; ok {
 		return fmt.Errorf("You have already registered for a public key")
 	}
+	jsonBytes, err := json.Marshal(&Transaction{Type: Register, Email: email, PublicKey: key})
+	if err != nil {
+		log.Print(err)
+	}
+
+	// make request
+	res, err := http.Post(CAurl, "application/json", bytes.NewReader(jsonBytes))
+	if err != nil {
+		log.Print(err)
+	}
+	defer res.Body.Close()
+	body, err := ioutil.ReadAll(res.Body)
+
+	// check request response and log errors
+	if res.StatusCode != 200 {
+		log.Print(err)
+	}
 	trans := Transaction{
 		Type:      Register,
 		Email:     email,
 		PublicKey: key,
-		Signature: CASig,
+		Signature: body,
 	}
 	// add this to our "block" that we're working on
 	addToBlock(trans)
