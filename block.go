@@ -102,43 +102,25 @@ func (b *Block) validateHash() error {
 }
 
 func (b *Block) validateTxn() error {
-	// VALIDATE WITH RESPECT TO BLOCK CHAIN by finding the most recent transaction pertaining to the user,
-	// checking the signature with the transaction to be added or verifying the CASig if there has been no
-	// user-made transaction thus far.
-	var lastTxn Transaction
 	for _, txn := range b.Transactions {
-		// get most recent block
-		found := false
-		for i := len(BlockChain); i > 0; i-- {
-			for _, t := range b.Transactions {
-				if t.Email == txn.Email {
-					lastTxn = t
-					found = true
-				}
-			}
-			if found {
-				break
-			}
-		}
-
 		// get the bytes to hash
 		jsonBytes, err := json.Marshal(&txn)
 
 		// did not find previous transaction of this user
 		// must be a registration and signed by the CA
-		if !found {
+		lastPubKey, ok := Database[txn.Email]
+		if !ok {
 			if txn.Type != Register {
 				return fmt.Errorf("Cannot update a nonexistent public key")
 			}
 			// verify the CA signed this request
-
 			if err := rsa.VerifyPKCS1v15(&CAKey, crypto.SHA256, jsonBytes, txn.Signature); err != nil {
 				return fmt.Errorf("Not signed by the CA")
 			}
 			return nil
 		}
 		// else this is an update
-		if err := rsa.VerifyPKCS1v15(&lastTxn.PublicKey, crypto.SHA256, jsonBytes, lastTxn.Signature); err != nil {
+		if err := rsa.VerifyPKCS1v15(&lastPubKey, crypto.SHA256, jsonBytes, txn.Signature); err != nil {
 			if txn.Type != Update {
 				return fmt.Errorf("Cannot register if you already are in the database")
 			}
