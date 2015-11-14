@@ -26,9 +26,10 @@ type NodeServer struct {
 func NewNodeServer(addr string, peers []string) *NodeServer {
 	ns := &NodeServer{
 		// initialize fields here
-		blkQueue: NewBlockQueue(),
+		blkQueue: NewBlockQueue(0),
 	}
 	ns.StartRPCServer(addr)
+	return ns
 }
 
 func (ns *NodeServer) isdead() bool {
@@ -97,7 +98,7 @@ func (ns *NodeServer) ProcessBlock() error {
 		if ns.blkQueue.Count() > 0 {
 			b := ns.blkQueue.Pop()
 			ns.qMu.Unlock()
-			if ns.blockSanityCheck() == false {
+			if ns.blockSanityCheck(b) == false {
 				// skip garbage blocks
 				continue
 			}
@@ -117,7 +118,7 @@ func (ns *NodeServer) ProcessBlock() error {
 					// peerCheckAndFixBlock will return the new max
 					// sequence after it fixes the block chian
 					// returns 0 if our block is valid
-					max = ns.peerCheckAndFixBlock(b)
+					max := ns.peerCheckAndFixBlock(b)
 					if max > 0 {
 						maxb := BlockChain[max]
 						ns.mMu.Unlock()
@@ -126,16 +127,18 @@ func (ns *NodeServer) ProcessBlock() error {
 					} else {
 						ns.mMu.Unlock()
 					}
-				} else {ns.mMu.Unlock()}
+				} else {
+					ns.mMu.Unlock()
+				}
 			}
 		} else {
 			ns.qMu.Unlock()
 			ns.mMu.Unlock()
 		}
-	} else {
-		ns.qMu.Unlock()
-		ns.mMu.Unlock()
 	}
+	ns.qMu.Unlock()
+	ns.mMu.Unlock()
+	return nil
 }
 
 // making sure the block isn't random garbage...
@@ -161,9 +164,11 @@ func (ns *NodeServer) processUnseenBlock(b Block) bool {
 	maxb := BlockChain[seq]
 	// make sure our highest block is still valid
 	// if not, throw away that block and back track
-	for matches, peer_block := ns.peerCheckBlock(maxb), !matches {
-		seq--
-		maxb = BlockChain[seq]
+	for matches, peer_block := range ns.peerCheckBlock(maxb) {
+		if !matches {
+			seq--
+			maxb = BlockChain[seq]
+		}
 	}
 
 	// now we know everything so far seems valid; fill up our BlockChain upto b.SeqNum - 1
@@ -176,17 +181,19 @@ func (ns *NodeServer) processUnseenBlock(b Block) bool {
 		}
 		ns.recordBlock(b)
 		BlockChain[seq] = peer_block
-		if seq >= b.SeqNum - 1 {
+		if seq >= b.SeqNum-1 {
 			break
 		}
 		seq++
 	}
 
 	// check if b can be based on top of us
-	if b.ValidateHash() && b.ValidateTxn() {
-		ns.recordBlock(b)
-		BlockChain[b.SeqNum] = b
-		return true
+	if err := b.ValidateHash(); err != nil {
+		if err := b.ValidateTxn(); err != nil {
+			ns.recordBlock(b)
+			BlockChain[b.SeqNum] = b
+			return true
+		}
 	}
 	return false
 }
@@ -196,10 +203,12 @@ func (ns *NodeServer) peerCheckAndFixBlock(b Block) uint64 {
 	our_block = BlockChain[b.SeqNum]
 	conflict := false
 	seq := b.SeqNum
-	for matches, peer_block := peerCheckBlock(our_block), !matches {
-		seq--
-		our_block = BlockChain[seq]
-		conflict = true
+	for matches, peer_block := range peerCheckBlock(our_block) {
+		if !matches {
+			seq--
+			our_block = BlockChain[seq]
+			conflict = true
+		}
 	}
 	if !conflict {
 		return 0
@@ -233,7 +242,7 @@ func (ns *NodeServer) peerCheckBlock(ob Block) (bool, Block) {
 	return false, peer_block
 }
 
-func (ns *NodeServer) peerRequestBlock(uint64 seq) (bool, Block) {
+func (ns *NodeServer) peerRequestBlock(seq uint64) (bool, Block) {
 	// perform sanity checks on all received blocks
 	// only return blocks that represent received majority
 	var wg sync.WaitGroup
@@ -242,7 +251,7 @@ func (ns *NodeServer) peerRequestBlock(uint64 seq) (bool, Block) {
 	blockCount := make(map[[]byte]uint64)
 	wg.Add(len(ns.peers))
 	for _, peer := range ns.peers {
-		go func(peer string){
+		go func(peer string) {
 			found, blk := ns.RequestBlock(peer, seq)
 			if found && ns.blockSanityCheck(blk) {
 				mu.Lock()
