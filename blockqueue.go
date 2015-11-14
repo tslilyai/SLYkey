@@ -38,8 +38,7 @@ func (bq *BlockQueue) Push(b Block) {
 		bq.tail = uint64(len(bq.queue))
 		bq.queue = realloc
 	}
-	// XXX what is n????
-	bq.queue[bq.tail] = n
+	bq.queue[bq.tail] = b
 	bq.tail = (bq.tail + 1) % uint64(len(bq.queue))
 	bq.count++
 }

@@ -5,35 +5,60 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 )
 
-const numTrans = 5
+const numZeros = 28
 
 type Block struct {
 	Transactions []Transaction
 	SeqNum       uint64
-	ProofOfWork  uint64
-	Hash         uint64
+	ProofOfWork  []byte
+	Hash         []byte
 }
 
 var (
 	CurrentBlock = Block{
 		Transactions: nil,
 		SeqNum:       1,
-		ProofOfWork:  0,
-		Hash:         0,
+		ProofOfWork:  []byte{},
+		Hash:         []byte{},
 	}
 	// initialize all blockchains with dummy block of seqnum 0
 	BlockChain map[uint64]Block = map[uint64]Block{
 		0: Block{
 			Transactions: nil,
 			SeqNum:       0,
-			ProofOfWork:  0,
-			Hash:         0,
+			ProofOfWork:  []byte{},
+			Hash:         []byte{},
 		},
 	}
 )
+
+func (b *Block) GetHash(parentHash []byte) []byte {
+	toHash := append(b.strToHash(parentHash), b.ProofOfWork...)
+	checksum := sha256.Sum256(toHash)
+	return checksum[:]
+}
+
+func (b *Block) strToHash(parentHash []byte) []byte {
+	var (
+		toHash    = parentHash
+		jsonBytes []byte
+		err       error
+	)
+
+	for _, txn := range b.Transactions {
+		jsonBytes, err = json.Marshal(&Transaction{
+			Type:      txn.Type,
+			Email:     txn.Email,
+			PublicKey: txn.PublicKey,
+		})
+		toHash = append(toHash, jsonBytes...)
+	}
+	return toHash
+}
 
 // add a transaction to a block, beginning work on a block if the node is not currently working on a block
 func addToBlock(t Transaction) {
@@ -45,38 +70,45 @@ func clearCurrentBlock() {
 	CurrentBlock = Block{
 		Transactions: nil,
 		SeqNum:       CurrentBlock.SeqNum + 1,
-		ProofOfWork:  0,
+		ProofOfWork:  []byte{},
 	}
 }
 
 // compute and set the proof of work and hash of the block
-func setProofOfWork(b *Block) {
-	chainHash := BlockChain[b.SeqNum-1].Hash
-	// resulting hash must begin with 28 zeros
-	target := uint64(^uint64(0) >> 28)
-	buf := make([]byte, 16)
+// we will want to hash the (block transactions + parent hash + pow/nonce)
+func (b *Block) setProofOfWork(parentHash []byte) {
+	toHash := b.strToHash(parentHash)
+
+	// resulting hash must begin with numZero zeros
+	target := uint64(^uint64(0) >> numZeros)
+	nonceBuf := make([]byte, 8)
 	nonce := uint64(0)
-	hash := uint64(^uint(0))
-	for hash > target {
-		binary.PutUvarint(buf, chainHash+nonce)
-		checksum := sha256.Sum256(buf)
-		hash = binary.BigEndian.Uint64(checksum[0:32])
+
+	checksum := [32]byte{}
+	hashNum := uint64(^uint(0))
+	for hashNum > target {
+		binary.PutUvarint(nonceBuf, nonce)
+		tryHash := append(toHash, nonceBuf...)
+		checksum = sha256.Sum256(toHash)
+		hashNum = binary.BigEndian.Uint64(checksum[0:32])
 		nonce++
 	}
-	b.ProofOfWork = nonce
-	b.Hash = hash
+	b.ProofOfWork = nonceBuf
+	b.Hash = checksum[:]
 }
 
 // verify proof of work
 // check that the block's parent's hash matches the hash of the parent block (seqNum - 1)
 // validate block with respect to the block chain
 func validate(b *Block) error {
-	// VALIDATE BLOCK'S HASH
+	// VALIDATE BLOCK'S HASH (Proof of Work)
 	buf := make([]byte, 16)
+	// buffer is hash of (transactions + parent + pow)
 	binary.PutUvarint(buf, BlockChain[b.SeqNum-1].Hash+b.ProofOfWork)
 	target := uint64(^uint64(0) >> 28)
 	checksum := sha256.Sum256(buf)
 	hash := binary.BigEndian.Uint64(checksum[0:32])
+
 	// ensure checksum begins with 28 0s
 	if hash > target {
 		return fmt.Errorf("invalid proof of work, hash does not begin with 28 0s")
