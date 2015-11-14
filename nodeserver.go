@@ -91,7 +91,7 @@ func (ns *NodeServer) RemoteBlockLookup(args *RequestBlockArgs, reply *RequestBl
 // we also update the database and block chain with the block transactions
 // should we just have a loop that calls this?
 // XXX drop block if we receive another block?
-func (ns *NodeServer) ProcessBlock(b *Block) error {
+func (ns *NodeServer) WorkOnBlock(b *Block) error {
 	setProofOfWork(b)
 	ns.SendBlock( /*remote string XXX*/ "something", *b)
 	updateDatabase(b)

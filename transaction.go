@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"crypto"
 	"crypto/rsa"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -27,8 +29,7 @@ const (
 
 var (
 	Database map[string]rsa.PublicKey
-	// XXX need to have actual key
-	CAKey = rsa.PublicKey{
+	CAKey    = rsa.PublicKey{
 		N: big.NewInt(3),
 		E: 3,
 	}
@@ -84,13 +85,18 @@ func RegisterPublicKey(key rsa.PublicKey, email string) error {
 // Returns error on failure, nil on success
 // Updates a public key, signed by the user
 // signature should be signed on an empty byte hash
-func UpdatePublicKey(key rsa.PublicKey, sig []byte, email string) error {
+func UpdatePublicKey(key rsa.PublicKey, hashed []byte, sig []byte, email string) error {
 	// value already in map, don't reregister
 	oldKey, ok := Database[email]
 	if !ok {
 		return fmt.Errorf("You have never registered for a public key")
 	}
-	if err := rsa.VerifyPKCS1v15(&oldKey, 0, []byte{}, sig); err != nil {
+	jsonBytes, err := json.Marshal(&Transaction{Type: Update, Email: email, PublicKey: key})
+
+	// protocol: user uses SHA256 to hash the transaction
+	hash := sha256.Sum256(jsonBytes)
+	hashbytes := hash[:]
+	if err := rsa.VerifyPKCS1v15(&oldKey, crypto.SHA256, hashbytes, sig); err != nil {
 		return fmt.Errorf("bad signature")
 	}
 	trans := Transaction{

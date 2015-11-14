@@ -4,9 +4,13 @@ import (
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"flag"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -18,12 +22,11 @@ import (
 
 var (
 	port        = flag.Int("port", 8080, "HTTP port")
+	privKeyFile = flag.String("key", "rsa_pub", "Private Key File")
 	ErrPost     = "must use POST"
 	ErrDecode   = "bad transaction json data"
 	ErrBadEmail = "bad email address"
 	ErrBadType  = "must be a request transaction"
-	// XXX get from database or something
-	privateKey = rsa.PrivateKey
 )
 
 // App defines an application that can be run
@@ -41,8 +44,8 @@ func NewApp() (App, error) {
 		},
 		Timeout: 2 * time.Second,
 	}
-
-	app := &app{server}
+	priv := getPrivateKey()
+	app := &app{server, priv}
 
 	handler.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
 		app.registerReq(w, r)
@@ -52,7 +55,8 @@ func NewApp() (App, error) {
 }
 
 type app struct {
-	server *graceful.Server
+	server     *graceful.Server
+	privateKey *rsa.PrivateKey
 }
 
 // Run starts the app
@@ -79,8 +83,8 @@ func (a *app) registerReq(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, ErrBadEmail, http.StatusBadRequest)
 	}
 
-	// sign the transaction, with the hash of the public key
-	s, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, []byte(data.Email))
+	// sign the transaction, with the hash of the transaction json (without signature)
+	s, err := rsa.SignPKCS1v15(rand.Reader, a.privateKey, crypto.SHA256, []byte(r.Body))
 	if err != nil {
 		http.Error(w, "Could not sign registration request", http.StatusInternalServerError)
 	}
@@ -92,4 +96,23 @@ func (a *app) registerReq(w http.ResponseWriter, r *http.Request) {
 func validateEmail(email string) bool {
 	Re := regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)
 	return Re.MatchString(email)
+}
+
+func getPrivateKey() *rsa.PrivateKey {
+	// Extract the PEM-encoded data block
+	pemData := ioutil.ReadFile(*privKeyFile)
+	block, _ := pem.Decode(pemData)
+	if block == nil {
+		log.Fatalf("bad key data: %s", "not PEM-encoded")
+	}
+	if got, want := block.Type, "RSA PRIVATE KEY"; got != want {
+		log.Fatalf("unknown key type %q, want %q", got, want)
+	}
+
+	// Decode the RSA private key
+	priv, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		log.Fatalf("bad private key: %s", err)
+	}
+	return priv
 }
