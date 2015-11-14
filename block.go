@@ -74,12 +74,12 @@ func (b *Block) SetProofOfWork(parentHash []byte, c chan Block) {
 	checksum := [32]byte{}
 	hashNum := uint64(^uint(0))
 
+	// check every NumTries times to see if we received a block in the queue
+	// drop block and try again with updated parent block
 	ctr := 0
 	dropBlock := false
 	pBlock := Block{}
 	for hashNum > target && !dropBlock {
-		// check every NumTries times to see if we received a block in the queue
-		// drop block and try again with updated parent block
 		if ctr%NumTries == 0 {
 			dropBlock = false
 			for {
@@ -99,6 +99,7 @@ func (b *Block) SetProofOfWork(parentHash []byte, c chan Block) {
 		nonce++
 	}
 	if dropBlock {
+		b.SeqNum = pBlock.SeqNum + 1
 		go b.SetProofOfWork(pBlock.Hash, c)
 		return
 	}

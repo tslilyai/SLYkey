@@ -87,15 +87,13 @@ func (ns *NodeServer) RemoteBlockLookup(args *RequestBlockArgs, reply *RequestBl
 	return fmt.Errorf(ErrNotFound)
 }
 
-// compute the proof of work and then broadcast the block
-// we also update the database and block chain with the block transactions
-// should we just have a loop that calls this?
-// XXX drop block if we receive another block?
+// compute the proof of work and then add the block to our queue
 func (ns *NodeServer) WorkOnBlock(pBlock Block, c chan Block) error {
 	for {
 		if CurrentBlock.Transactions != nil {
 			b := CurrentBlock
 			clearCurrentBlock()
+			b.SeqNum = pBlock.SeqNum + 1
 			b.SetProofOfWork(pBlock.Hash, c)
 			select {
 			// we found a block in the channel, so continue/start over
