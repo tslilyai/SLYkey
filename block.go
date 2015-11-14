@@ -10,7 +10,10 @@ import (
 	"fmt"
 )
 
-const NumZeros = 28
+const (
+	NumZeros = 28
+	NumTries = 5000
+)
 
 type Block struct {
 	Transactions []Transaction
@@ -61,22 +64,43 @@ func (b *Block) strToHash(parentHash []byte) []byte {
 
 // compute and set the proof of work and hash of the block
 // we will want to hash the (block transactions + parent hash + pow/nonce)
-func (b *Block) setProofOfWork(parentHash []byte) {
+func (b *Block) SetProofOfWork(parentHash []byte, c chan Block) {
 	toHash := b.strToHash(parentHash)
 
 	// resulting hash must begin with numZero zeros
 	target := uint64(^uint64(0) >> NumZeros)
 	nonceBuf := make([]byte, 8)
 	nonce := uint64(0)
-
 	checksum := [32]byte{}
 	hashNum := uint64(^uint(0))
-	for hashNum > target {
+
+	ctr := 0
+	dropBlock := false
+	pBlock := Block{}
+	for hashNum > target && !dropBlock {
+		// check every NumTries times to see if we received a block in the queue
+		// drop block and try again with updated parent block
+		if ctr%NumTries == 0 {
+			dropBlock = false
+			for {
+				select {
+				case pBlock := <-c:
+					dropBlock := true
+					continue
+				default:
+					break
+				}
+			}
+		}
 		binary.PutUvarint(nonceBuf, nonce)
 		tryHash := append(toHash, nonceBuf...)
 		checksum = sha256.Sum256(toHash)
 		hashNum = binary.BigEndian.Uint64(checksum[0:32])
 		nonce++
+	}
+	if dropBlock {
+		go b.SetProofOfWork(pBlock.Hash, c)
+		return
 	}
 	b.ProofOfWork = nonceBuf
 	b.Hash = checksum[:]
@@ -84,7 +108,7 @@ func (b *Block) setProofOfWork(parentHash []byte) {
 
 // verify proof of work -- invariant: the parent exists in the map
 // 		- check that the block's parent's hash matches the hash of the parent block (seqNum - 1)
-func (b *Block) validateHash() error {
+func (b *Block) ValidateHash() error {
 	// VALIDATE BLOCK'S HASH (Proof of Work)
 	toHash := b.GetHash(BlockChain[b.SeqNum-1].Hash)
 	target := uint64(^uint64(0) >> NumZeros)
@@ -101,7 +125,7 @@ func (b *Block) validateHash() error {
 	return nil
 }
 
-func (b *Block) validateTxn() error {
+func (b *Block) ValidateTxn() error {
 	for _, txn := range b.Transactions {
 		// get the bytes to hash
 		jsonBytes, err := json.Marshal(&txn)

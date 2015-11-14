@@ -17,7 +17,7 @@ type NodeServer struct {
 	dead        int32
 	rpcListener net.Listener
 	peers       []string
-	blkQueue    BlockQueue
+	blkQueue    *BlockQueue
 }
 
 // addr: local address?
@@ -91,9 +91,20 @@ func (ns *NodeServer) RemoteBlockLookup(args *RequestBlockArgs, reply *RequestBl
 // we also update the database and block chain with the block transactions
 // should we just have a loop that calls this?
 // XXX drop block if we receive another block?
-func (ns *NodeServer) WorkOnBlock(b *Block) error {
-	setProofOfWork(b)
-	ns.SendBlock( /*remote string XXX*/ "something", *b)
-	updateDatabase(b)
+func (ns *NodeServer) WorkOnBlock(pBlock Block, c chan Block) error {
+	for {
+		if CurrentBlock.Transactions != nil {
+			b := CurrentBlock
+			clearCurrentBlock()
+			b.SetProofOfWork(pBlock.Hash, c)
+			select {
+			// we found a block in the channel, so continue/start over
+			case pBlock := <-c:
+				continue
+			default:
+				ns.blkQueue.Push(b)
+			}
+		}
+	}
 	return nil
 }

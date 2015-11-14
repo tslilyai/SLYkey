@@ -15,8 +15,8 @@ type BlockQueue struct {
 	count uint64
 }
 
-func NewBlockQueue(initSize uint64) BlockQueue {
-	ret := BlockQueue{}
+func NewBlockQueue(initSize uint64) *BlockQueue {
+	ret := &BlockQueue{}
 	ret.queue = make([]Block, initSize)
 	ret.head = 0
 	ret.tail = 0
