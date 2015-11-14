@@ -101,24 +101,39 @@ func (ns *NodeServer) ProcessBlock() error {
 				// skip garbage blocks
 				continue
 			}
-			b1, ok := BlockChain[b.SeqNum]
+			our_block, ok := BlockChain[b.SeqNum]
 			if !ok {
 				// fill up block chain here
 				if ns.processUnseenBlock(b) {
-					// signal worker of block b.SeqNum
+					maxb := BlockChain[b.SeqNum]
+					ns.mMu.Unlock()
+					// signal worker of block b.SeqNum; could block so unlock
+					ns.workerChannel <- maxb
+				} else {
+					ns.mMu.Unlock()
 				}
 			} else {
-				if (b1 != b) {
+				if !ns.BlockCompare(b, our_block) {
 					// peerCheckAndFixBlock will return the new max
 					// sequence after it fixes the block chian
 					// returns 0 if our block is valid
 					max = ns.peerCheckAndFixBlock(b)
-					// signal worker of new job here
-				}
+					if max > 0 {
+						maxb := BlockChain[max]
+						ns.mMu.Unlock()
+						// signal worker of new job here
+						ns.workerChannel <- maxb
+					} else {
+						ns.mMu.Unlock()
+					}
+				} else {ns.mMu.Unlock()}
 			}
 		} else {
 			ns.qMu.Unlock()
+			ns.mMu.Unlock()
 		}
+	} else {
+		ns.qMu.Unlock()
 		ns.mMu.Unlock()
 	}
 }
@@ -146,19 +161,29 @@ func (ns *NodeServer) processUnseenBlock(b Block) bool {
 	maxb := BlockChain[seq]
 	// make sure our highest block is still valid
 	// if not, throw away that block and back track
-	for matches, peer_block := peerCheckBlock(maxb), !matches {
-		// add/override user's key
-		// XXX actually this is the place to roll back database
-		// if we ever want to do it
-		ns.recordBlock(peer_block)
-		BlockChain[seq] = peer_block
+	for matches, peer_block := ns.peerCheckBlock(maxb), !matches {
 		seq--
 		maxb = BlockChain[seq]
 	}
 
-	// now we know everything so far seems valid, check if b can be
-	// based on top of us
-	if ns.validateHash && ns.validateTransaction {
+	// now we know everything so far seems valid; fill up our BlockChain upto b.SeqNum - 1
+	seq++
+	for {
+		exists, peer_block := ns.peerRequestBlock(seq)
+		if !exists || !peer_block.ValidateHash() || !peer_block.ValidateTxn() {
+			// can't form a valid block chain, give up
+			return false
+		}
+		ns.recordBlock(b)
+		BlockChain[seq] = peer_block
+		if seq >= b.SeqNum - 1 {
+			break
+		}
+		seq++
+	}
+
+	// check if b can be based on top of us
+	if b.ValidateHash() && b.ValidateTxn() {
 		ns.recordBlock(b)
 		BlockChain[b.SeqNum] = b
 		return true
@@ -172,12 +197,6 @@ func (ns *NodeServer) peerCheckAndFixBlock(b Block) uint64 {
 	conflict := false
 	seq := b.SeqNum
 	for matches, peer_block := peerCheckBlock(our_block), !matches {
-		if !validateHash || !validateTransaction {
-			// we are screwed, return current seq
-			return seq
-		}
-		ns.recordBlock(peer_block)
-		BlockChain[seq] = peer_block
 		seq--
 		our_block = BlockChain[seq]
 		conflict = true
@@ -192,7 +211,7 @@ func (ns *NodeServer) peerCheckAndFixBlock(b Block) uint64 {
 		if !exists {
 			break
 		}
-		if ns.validateHash && validateTransaction {
+		if peer_block.ValidateHash() && peer_block.ValidateTxn() {
 			// adds block to database + blockchain
 			ns.recordBlock(peer_block)
 			BlockChain[seq] = peer_block
@@ -242,6 +261,7 @@ func (ns *NodeServer) peerRequestBlock(uint64 seq) (bool, Block) {
 	}
 	wg.Wait()
 
+	// collect responses and pick the "majority"
 	var max_count uint64 = 0
 	var max_count_hash []byte = nil
 	for hash, count := range blockMap {
