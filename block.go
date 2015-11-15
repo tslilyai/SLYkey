@@ -19,7 +19,8 @@ type Block struct {
 	Transactions []Transaction
 	SeqNum       uint64
 	ProofOfWork  []byte
-	Hash         []byte
+	Hash         [32]byte
+	ParentHash   [32]byte
 }
 
 var (
@@ -27,7 +28,7 @@ var (
 		Transactions: nil,
 		SeqNum:       1,
 		ProofOfWork:  []byte{},
-		Hash:         []byte{},
+		Hash:         [32]byte{},
 	}
 	// initialize all blockchains with dummy block of seqnum 0
 	BlockChain map[uint64]Block = map[uint64]Block{
@@ -35,22 +36,22 @@ var (
 			Transactions: nil,
 			SeqNum:       0,
 			ProofOfWork:  []byte{},
-			Hash:         []byte{},
+			Hash:         [32]byte{},
 		},
 	}
 )
 
 // gets the hash of the block when the proof of work is already computed
-func (b *Block) GetHash(parentHash []byte) []byte {
-	toHash := append(b.strToHash(parentHash), b.ProofOfWork...)
+func (b *Block) GetHash() [32]byte {
+	toHash := append(b.strToHash(b.ParentHash), b.ProofOfWork...)
 	checksum := sha256.Sum256(toHash)
-	return checksum[:]
+	return checksum
 }
 
 // computes the string of parenthash + transaction json strings
-func (b *Block) strToHash(parentHash []byte) []byte {
+func (b *Block) strToHash(parentHash [32]byte) []byte {
 	var (
-		toHash    = parentHash
+		toHash    = parentHash[:]
 		jsonBytes []byte
 		err       error
 	)
@@ -64,7 +65,7 @@ func (b *Block) strToHash(parentHash []byte) []byte {
 
 // compute and set the proof of work and hash of the block
 // we will want to hash the (block transactions + parent hash + pow/nonce)
-func (b *Block) SetProofOfWork(parentHash []byte, c chan Block) {
+func (b *Block) SetProofOfWork(parentHash [32]byte, c chan Block) {
 	toHash := b.strToHash(parentHash)
 
 	// resulting hash must begin with numZero zeros
@@ -104,23 +105,27 @@ func (b *Block) SetProofOfWork(parentHash []byte, c chan Block) {
 		return
 	}
 	b.ProofOfWork = nonceBuf
-	b.Hash = checksum[:]
+	b.Hash = checksum
+	b.ParentHash = parentHash
 }
 
 // verify proof of work -- invariant: the parent exists in the map
 // 		- check that the block's parent's hash matches the hash of the parent block (seqNum - 1)
 func (b *Block) ValidateHash() error {
 	// VALIDATE BLOCK'S HASH (Proof of Work)
-	toHash := b.GetHash(BlockChain[b.SeqNum-1].Hash)
+	if b.ParentHash != BlockChain[b.SeqNum-1].Hash {
+		return fmt.Errorf("invalid parent block hash")
+	}
+	toHash := b.GetHash()
 	target := uint64(^uint64(0) >> NumZeros)
-	checksum := sha256.Sum256(toHash)
+	checksum := sha256.Sum256(toHash[:])
 
 	// ensure checksum begins with 28 0s
 	if binary.BigEndian.Uint64(checksum[0:32]) > target {
 		return fmt.Errorf("invalid proof of work, hash does not begin with 28 0s")
 	}
 	// ensure that block hash matches hash of parent + proof of work
-	if bytes.Equal(checksum[:], b.Hash) {
+	if bytes.Equal(checksum[:], b.Hash[:]) {
 		return fmt.Errorf("hash does not match that of parent")
 	}
 	return nil
