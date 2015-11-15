@@ -214,8 +214,8 @@ func (ns *NodeServer) processUnseenBlock(b Block) bool {
 	}
 
 	// check if b can be based on top of us
-	if err := b.ValidateHash(); err != nil {
-		if err := b.ValidateTxn(); err != nil {
+	if err := b.ValidateHash(); err == nil {
+		if err := b.ValidateTxn(); err == nil {
 			updateDatabase(&b)
 			BlockChain[b.SeqNum] = b
 			return true
