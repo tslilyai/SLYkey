@@ -205,7 +205,7 @@ func (ns *NodeServer) processUnseenBlock(b Block) bool {
 			// can't form a valid block chain, give up
 			return false
 		}
-		ns.recordBlock(b)
+		updateDatabase(&b)
 		BlockChain[seq] = peer_block
 		if seq >= b.SeqNum-1 {
 			break
@@ -216,7 +216,7 @@ func (ns *NodeServer) processUnseenBlock(b Block) bool {
 	// check if b can be based on top of us
 	if err := b.ValidateHash(); err != nil {
 		if err := b.ValidateTxn(); err != nil {
-			ns.recordBlock(b)
+			updateDatabase(&b)
 			BlockChain[b.SeqNum] = b
 			return true
 		}
@@ -251,7 +251,7 @@ func (ns *NodeServer) peerCheckAndFixBlock(b Block) uint64 {
 		}
 		if peer_block.ValidateHash() == nil && peer_block.ValidateTxn() == nil {
 			// adds block to database + blockchain
-			ns.recordBlock(peer_block)
+			updateDatabase(&peer_block)
 			BlockChain[seq] = peer_block
 			seq++
 		} else {
