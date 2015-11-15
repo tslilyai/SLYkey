@@ -19,8 +19,8 @@ type Block struct {
 	Transactions []Transaction
 	SeqNum       uint64
 	ProofOfWork  []byte
-	Hash         [32]byte
-	ParentHash   [32]byte
+	Hash         [sha256.Size]byte
+	ParentHash   [sha256.Size]byte
 }
 
 var (
@@ -28,7 +28,7 @@ var (
 		Transactions: nil,
 		SeqNum:       1,
 		ProofOfWork:  []byte{},
-		Hash:         [32]byte{},
+		Hash:         [sha256.Size]byte{},
 	}
 	// initialize all blockchains with dummy block of seqnum 0
 	BlockChain map[uint64]Block = map[uint64]Block{
@@ -36,20 +36,20 @@ var (
 			Transactions: nil,
 			SeqNum:       0,
 			ProofOfWork:  []byte{},
-			Hash:         [32]byte{},
+			Hash:         [sha256.Size]byte{},
 		},
 	}
 )
 
 // gets the hash of the block when the proof of work is already computed
-func (b *Block) GetHash() [32]byte {
+func (b *Block) GetHash() [sha256.Size]byte {
 	toHash := append(b.strToHash(b.ParentHash), b.ProofOfWork...)
 	checksum := sha256.Sum256(toHash)
 	return checksum
 }
 
 // computes the string of parenthash + transaction json strings
-func (b *Block) strToHash(parentHash [32]byte) []byte {
+func (b *Block) strToHash(parentHash [sha256.Size]byte) []byte {
 	var (
 		toHash    = parentHash[:]
 		jsonBytes []byte
@@ -65,14 +65,14 @@ func (b *Block) strToHash(parentHash [32]byte) []byte {
 
 // compute and set the proof of work and hash of the block
 // we will want to hash the (block transactions + parent hash + pow/nonce)
-func (b *Block) SetProofOfWork(parentHash [32]byte, c chan Block) {
+func (b *Block) SetProofOfWork(parentHash [sha256.Size]byte, c chan Block) {
 	toHash := b.strToHash(parentHash)
 
 	// resulting hash must begin with numZero zeros
 	target := uint64(^uint64(0) >> NumZeros)
 	nonceBuf := make([]byte, 8)
 	nonce := uint64(0)
-	checksum := [32]byte{}
+	checksum := [sha256.Size]byte{}
 	hashNum := uint64(^uint(0))
 
 	// check every NumTries times to see if we received a block in the queue
@@ -96,7 +96,7 @@ func (b *Block) SetProofOfWork(parentHash [32]byte, c chan Block) {
 		binary.PutUvarint(nonceBuf, nonce)
 		tryHash := append(toHash, nonceBuf...)
 		checksum = sha256.Sum256(toHash)
-		hashNum = binary.BigEndian.Uint64(checksum[0:32])
+		hashNum = binary.BigEndian.Uint64(checksum[0:sha256.Size])
 		nonce++
 	}
 	if dropBlock {
@@ -121,7 +121,7 @@ func (b *Block) ValidateHash() error {
 	checksum := sha256.Sum256(toHash[:])
 
 	// ensure checksum begins with 28 0s
-	if binary.BigEndian.Uint64(checksum[0:32]) > target {
+	if binary.BigEndian.Uint64(checksum[0:sha256.Size]) > target {
 		return fmt.Errorf("invalid proof of work, hash does not begin with 28 0s")
 	}
 	// ensure that block hash matches hash of parent + proof of work

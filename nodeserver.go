@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"log"
@@ -41,6 +42,7 @@ func NewNodeServer(addr string, peers []string) *NodeServer {
 		blkQueue:      NewBlockQueue(1),
 	}
 	ns.StartRPCServer(addr)
+	go ns.ProcessBlock()
 	go ns.WorkOnBlock(BlockChain[0])
 	return ns
 }
@@ -154,26 +156,17 @@ func (ns *NodeServer) ProcessBlock() error {
 	return nil
 }
 
-func (ns *NodeServer) HashEq(h1 [32]byte, h2 [32]byte) bool {
-	for idx, b := range h1 {
-		if b != h2[idx] {
-			return false
-		}
-	}
-	return true
-}
-
 // making sure the block isn't random garbage...
 func (ns *NodeServer) blockSanityCheck(b Block) bool {
-	hashNum := binary.BigEndian.Uint64(b.Hash[0:32])
+	hashNum := binary.BigEndian.Uint64(b.Hash[0:sha256.Size])
 	// XXX I wish I could just do b.GetHash() without passing in parent's hash
 	// parent's hash should be part of the block, I think
-	return ns.HashEq(b.GetHash(), b.Hash) && hashNum <= uint64(^uint64(0)>>NumZeros)
+	return b.GetHash() == b.Hash && hashNum <= uint64(^uint64(0)>>NumZeros)
 }
 
 func (ns *NodeServer) BlockCompare(b1 Block, b2 Block) bool {
 	assert(ns.blockSanityCheck(b1) && ns.blockSanityCheck(b2), "ns.BlockCompare")
-	return ns.HashEq(b1.Hash, b2.Hash)
+	return b1.Hash == b2.Hash
 }
 
 // Precondition: mMu acquired
@@ -283,8 +276,8 @@ func (ns *NodeServer) peerRequestBlock(seq uint64) (bool, Block) {
 	// only return blocks that represent received majority
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	blockMap := make(map[[32]byte]Block)
-	blockCount := make(map[[32]byte]uint64)
+	blockMap := make(map[[sha256.Size]byte]Block)
+	blockCount := make(map[[sha256.Size]byte]uint64)
 	wg.Add(len(ns.peers))
 	for _, peer := range ns.peers {
 		go func(peer string) {
@@ -308,14 +301,14 @@ func (ns *NodeServer) peerRequestBlock(seq uint64) (bool, Block) {
 
 	// collect responses and pick the "majority"
 	var max_count uint64 = 0
-	var max_count_hash [32]byte = [32]byte{}
+	var max_count_hash [sha256.Size]byte = [sha256.Size]byte{}
 	for hash, count := range blockCount {
 		if count > max_count {
 			max_count_hash = hash
 			max_count = count
 		}
 	}
-	if max_count_hash == [32]byte{} {
+	if max_count_hash == [sha256.Size]byte{} {
 		return false, Block{}
 	}
 	return true, blockMap[max_count_hash]
