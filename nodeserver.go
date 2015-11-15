@@ -12,12 +12,13 @@ const (
 )
 
 type NodeServer struct {
-	qMu         sync.Mutex // mutex for BlockQueue
-	mMu         sync.Mutex // mutex for block chain (map)
-	dead        int32
-	rpcListener net.Listener
-	peers       []string
-	blkQueue    *BlockQueue
+	qMu           sync.Mutex // mutex for BlockQueue
+	mMu           sync.Mutex // mutex for block chain (map)
+	dead          int32
+	rpcListener   net.Listener
+	peers         []string
+	workerChannel chan Block
+	blkQueue      *BlockQueue
 }
 
 // addr: local address?
@@ -26,7 +27,10 @@ type NodeServer struct {
 func NewNodeServer(addr string, peers []string) *NodeServer {
 	ns := &NodeServer{
 		// initialize fields here
-		blkQueue: NewBlockQueue(0),
+		dead: 0,
+		peers: peers,
+		workerChannel: make(chan Block, 16),
+		blkQueue: NewBlockQueue(1),
 	}
 	ns.StartRPCServer(addr)
 	return ns
@@ -87,12 +91,13 @@ func (ns *NodeServer) RemoteBlockLookup(args *RequestBlockArgs, reply *RequestBl
 	}
 	return fmt.Errorf(ErrNotFound)
 }
+// End of RPC methods
 
 // Yihe's processing thread:
 // checks the queue for incomings and notify worker thread
 // if necessary
 func (ns *NodeServer) ProcessBlock() error {
-	for {
+	for !isdead() {
 		ns.mMu.Lock()
 		ns.qMu.Lock()
 		if ns.blkQueue.Count() > 0 {
@@ -136,14 +141,18 @@ func (ns *NodeServer) ProcessBlock() error {
 			ns.mMu.Unlock()
 		}
 	}
-	ns.qMu.Unlock()
-	ns.mMu.Unlock()
 	return nil
 }
 
 // making sure the block isn't random garbage...
 func (ns *NodeServer) blockSanityCheck(b Block) bool {
-	// something like b.BlockHash() == b.Hash && b.Hash < target
+	hashNum := binary.BigEndian.Uint64(b.Hash[0:32])
+	return b.GetHash() == b.Hash && hashNum <= uint64(^uint64(0) >> NumZeros)
+}
+
+func (ns *NodeServer) blockCompare(b1 Block, b2 Block) bool {
+	assert(blockSanityCheck(b1) && blockSanityCheck(b2))
+	return b1.Hash == b2.Hash
 }
 
 // Precondition: mMu acquired
@@ -286,16 +295,16 @@ func (ns *NodeServer) peerRequestBlock(seq uint64) (bool, Block) {
 }
 
 // compute the proof of work and then add the block to our queue
-func (ns *NodeServer) WorkOnBlock(pBlock Block, c chan Block) error {
+func (ns *NodeServer) WorkOnBlock(pBlock Block) error {
 	for {
 		if CurrentBlock.Transactions != nil {
 			b := CurrentBlock
 			clearCurrentBlock()
 			b.SeqNum = pBlock.SeqNum + 1
-			b.SetProofOfWork(pBlock.Hash, c)
+			b.SetProofOfWork(pBlock.Hash, ns.workerChannel)
 			select {
 			// we found a block in the channel, so continue/start over
-			case pBlock := <-c:
+			case pBlock := <-ns.workerChannel:
 				continue
 			default:
 				ns.blkQueue.Push(b)
