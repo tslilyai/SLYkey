@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net"
+	"encoding/binary"
 	"sync"
 	"sync/atomic"
 )
@@ -19,6 +21,12 @@ type NodeServer struct {
 	peers         []string
 	workerChannel chan Block
 	blkQueue      *BlockQueue
+}
+
+func assert(condition bool, func_name string) {
+	if !condition {
+		log.Fatal("Assertion failure in function %v", func_name)
+	}
 }
 
 // addr: local address?
@@ -97,7 +105,7 @@ func (ns *NodeServer) RemoteBlockLookup(args *RequestBlockArgs, reply *RequestBl
 // checks the queue for incomings and notify worker thread
 // if necessary
 func (ns *NodeServer) ProcessBlock() error {
-	for !isdead() {
+	for !ns.isdead() {
 		ns.mMu.Lock()
 		ns.qMu.Lock()
 		if ns.blkQueue.Count() > 0 {
@@ -144,15 +152,29 @@ func (ns *NodeServer) ProcessBlock() error {
 	return nil
 }
 
+func (ns *NodeServer) HashEq(h1 []byte, h2 []byte) bool {
+	if len(h1) != len(h2) {
+		return false
+	}
+	for idx, b := range h1 {
+		if b != h2[idx] {
+			return false
+		}
+	}
+	return true
+}
+
 // making sure the block isn't random garbage...
 func (ns *NodeServer) blockSanityCheck(b Block) bool {
 	hashNum := binary.BigEndian.Uint64(b.Hash[0:32])
-	return b.GetHash() == b.Hash && hashNum <= uint64(^uint64(0) >> NumZeros)
+	// XXX I wish I could just do b.GetHash() without passing in parent's hash
+	// parent's hash should be part of the block, I think
+	return ns.HashEq(b.GetHash([]byte{}), b.Hash) && hashNum <= uint64(^uint64(0) >> NumZeros)
 }
 
-func (ns *NodeServer) blockCompare(b1 Block, b2 Block) bool {
-	assert(blockSanityCheck(b1) && blockSanityCheck(b2))
-	return b1.Hash == b2.Hash
+func (ns *NodeServer) BlockCompare(b1 Block, b2 Block) bool {
+	assert(ns.blockSanityCheck(b1) && ns.blockSanityCheck(b2), "ns.BlockCompare")
+	return ns.HashEq(b1.Hash, b2.Hash)
 }
 
 // Precondition: mMu acquired
@@ -173,10 +195,13 @@ func (ns *NodeServer) processUnseenBlock(b Block) bool {
 	maxb := BlockChain[seq]
 	// make sure our highest block is still valid
 	// if not, throw away that block and back track
-	for matches, peer_block := range ns.peerCheckBlock(maxb) {
+	for {
+		matches, peer_block := ns.peerCheckBlock(maxb)
 		if !matches {
 			seq--
 			maxb = BlockChain[seq]
+		} else {
+			break
 		}
 	}
 
@@ -184,7 +209,7 @@ func (ns *NodeServer) processUnseenBlock(b Block) bool {
 	seq++
 	for {
 		exists, peer_block := ns.peerRequestBlock(seq)
-		if !exists || !peer_block.ValidateHash() || !peer_block.ValidateTxn() {
+		if !exists || peer_block.ValidateHash() != nil || peer_block.ValidateTxn() != nil {
 			// can't form a valid block chain, give up
 			return false
 		}
@@ -209,14 +234,17 @@ func (ns *NodeServer) processUnseenBlock(b Block) bool {
 
 // Precondition: mMu acquired
 func (ns *NodeServer) peerCheckAndFixBlock(b Block) uint64 {
-	our_block = BlockChain[b.SeqNum]
+	our_block := BlockChain[b.SeqNum]
 	conflict := false
 	seq := b.SeqNum
-	for matches, peer_block := range peerCheckBlock(our_block) {
+	for {
+		matches, peer_block := ns.peerCheckBlock(our_block)
 		if !matches {
 			seq--
 			our_block = BlockChain[seq]
 			conflict = true
+		} else {
+			break
 		}
 	}
 	if !conflict {
@@ -229,7 +257,7 @@ func (ns *NodeServer) peerCheckAndFixBlock(b Block) uint64 {
 		if !exists {
 			break
 		}
-		if peer_block.ValidateHash() && peer_block.ValidateTxn() {
+		if peer_block.ValidateHash() == nil && peer_block.ValidateTxn() == nil {
 			// adds block to database + blockchain
 			ns.recordBlock(peer_block)
 			BlockChain[seq] = peer_block
@@ -244,7 +272,7 @@ func (ns *NodeServer) peerCheckAndFixBlock(b Block) uint64 {
 }
 
 func (ns *NodeServer) peerCheckBlock(ob Block) (bool, Block) {
-	exists, peer_block := peerRequestBlock(ob.SeqNum)
+	exists, peer_block := ns.peerRequestBlock(ob.SeqNum)
 	if !exists || ns.BlockCompare(ob, peer_block) == true {
 		return true, Block{}
 	}
@@ -271,7 +299,7 @@ func (ns *NodeServer) peerRequestBlock(seq uint64) (bool, Block) {
 				} else {
 					v++
 				}
-				blockMap[blk.Hash] = v
+				blockCount[blk.Hash] = v
 				mu.Unlock()
 			}
 			wg.Done()
@@ -282,7 +310,7 @@ func (ns *NodeServer) peerRequestBlock(seq uint64) (bool, Block) {
 	// collect responses and pick the "majority"
 	var max_count uint64 = 0
 	var max_count_hash []byte = nil
-	for hash, count := range blockMap {
+	for hash, count := range blockCount {
 		if count > max_count {
 			max_count_hash = hash
 			max_count = count
