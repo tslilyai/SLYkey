@@ -171,6 +171,18 @@ func (ns *NodeServer) BlockCompare(b1 Block, b2 Block) bool {
 
 // Precondition: mMu acquired
 func (ns *NodeServer) processUnseenBlock(b Block) bool {
+	// common case optimization: see if b can be based on top our
+	// block chain directly
+	_, found := BlockChain[b.SeqNum - 1]
+	if found {
+		if b.ValidateHash() == nil && b.ValidateTxn() == nil {
+			updateDatabase(&b)
+			BlockChain[b.SeqNum] = b
+			return true
+		} else {
+			return false
+		}
+	}
 	// block b is not seen before, make sure the largest block
 	// we have is correct
 	seq := b.SeqNum - 1
