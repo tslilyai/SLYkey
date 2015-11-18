@@ -1,6 +1,6 @@
-#SLYkey: A Transparent Peer-to-Peer Public Key Directory
+#SLYkey
 
-##Create an irreversible log of registrations and revocations of public key
+##A Transparent Peer-to-Peer Public Key Directory
 
 ####Files:
 - ca:
@@ -10,6 +10,6 @@
 - rpc:
 - verifier:
 
-Created by **S**erna Wang, **L**ily Tsai, **Y**ihe Huang
+Created by **S**erena Wang, **L**ily Tsai, **Y**ihe Huang
 
 CS263, 2015
