@@ -30,9 +30,8 @@ func assert(condition bool, func_name string) {
 	}
 }
 
-// addr: local address?
-// peers: bunch of other servers?
-// XXX should call StartRPCServer, NewBlockQueue, etc.
+// addr: local address
+// peers: bunch of other servers
 func NewNodeServer(addr string, peers []string) *NodeServer {
 	ns := &NodeServer{
 		// initialize fields here
@@ -91,7 +90,6 @@ func (ns *NodeServer) RequestBlock(remote string, seqNum uint64) (bool, Block) {
 }
 
 func (ns *NodeServer) RemoteBlockLookup(args *RequestBlockArgs, reply *RequestBlockReply) error {
-	// XXX we need a mutex (called mMu right now) for the block chain
 	ns.mMu.Lock()
 	defer ns.mMu.Unlock()
 
@@ -159,8 +157,6 @@ func (ns *NodeServer) ProcessBlock() error {
 // making sure the block isn't random garbage...
 func (ns *NodeServer) blockSanityCheck(b Block) bool {
 	hashNum := binary.BigEndian.Uint64(b.Hash[0:sha256.Size])
-	// XXX I wish I could just do b.GetHash() without passing in parent's hash
-	// parent's hash should be part of the block, I think
 	return b.GetHash() == b.Hash && hashNum <= uint64(^uint64(0)>>NumZeros)
 }
 
@@ -173,7 +169,7 @@ func (ns *NodeServer) BlockCompare(b1 Block, b2 Block) bool {
 func (ns *NodeServer) processUnseenBlock(b Block) bool {
 	// common case optimization: see if b can be based on top our
 	// block chain directly
-	_, found := BlockChain[b.SeqNum - 1]
+	_, found := BlockChain[b.SeqNum-1]
 	if found {
 		if b.ValidateHash() == nil && b.ValidateTxn() == nil {
 			updateDatabase(&b)
