@@ -3,7 +3,10 @@
 ##A Transparent Peer-to-Peer Public Key Directory
 
 ####Files:
-- ca:
+- ca: 
+    - implements the webserver for the central authority
+    - includes logic to verify registration transaction POST requests
+    - on successful request handling, returns a signature over the hash of the transaction data
 - block:
 - blockqueue:
 - nodeserver:
