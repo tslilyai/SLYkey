@@ -2,6 +2,7 @@ package main
 
 import "fmt"
 
+// VerifyBlockChainAndUpdateDatabase Verifies that the entire blockchain is valid and updates the database.
 func VerifyBlockChainAndUpdateDatabase() error {
 	// for each block in block chain
 	seqNum := uint64(0)
