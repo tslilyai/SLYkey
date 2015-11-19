@@ -53,11 +53,10 @@ func (b *Block) strToHash(parentHash [sha256.Size]byte) []byte {
 	var (
 		toHash    = parentHash[:]
 		jsonBytes []byte
-		err       error
 	)
 
 	for _, txn := range b.Transactions {
-		jsonBytes, err = json.Marshal(&txn)
+		jsonBytes, _ = json.Marshal(&txn)
 		toHash = append(toHash, jsonBytes...)
 	}
 	return toHash
@@ -85,8 +84,8 @@ func (b *Block) SetProofOfWork(parentHash [sha256.Size]byte, c chan Block) {
 			dropBlock = false
 			for {
 				select {
-				case pBlock := <-c:
-					dropBlock := true
+				case pBlock = <-c:
+					dropBlock = true
 					continue
 				default:
 					break
@@ -94,7 +93,7 @@ func (b *Block) SetProofOfWork(parentHash [sha256.Size]byte, c chan Block) {
 			}
 		}
 		binary.PutUvarint(nonceBuf, nonce)
-		tryHash := append(toHash, nonceBuf...)
+		toHash := append(toHash, nonceBuf...)
 		checksum = sha256.Sum256(toHash)
 		hashNum = binary.BigEndian.Uint64(checksum[0:sha256.Size])
 		nonce++
@@ -138,6 +137,9 @@ func (b *Block) ValidateTxn() error {
 	for _, txn := range b.Transactions {
 		// get the bytes to hash
 		jsonBytes, err := json.Marshal(&txn)
+		if err != nil {
+			return err
+		}
 		lastPubKey, ok := BlockDatabase[txn.Email]
 		if !ok {
 			// no prior updates to this user in the current block

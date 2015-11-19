@@ -169,6 +169,11 @@ func (ns *NodeServer) BlockCompare(b1 Block, b2 Block) bool {
 func (ns *NodeServer) processUnseenBlock(b Block) bool {
 	// common case optimization: see if b can be based on top our
 	// block chain directly
+	var (
+		peer_block Block
+		matches    bool
+		exists     bool
+	)
 	_, found := BlockChain[b.SeqNum-1]
 	if found {
 		if b.ValidateHash() == nil && b.ValidateTxn() == nil {
@@ -196,7 +201,7 @@ func (ns *NodeServer) processUnseenBlock(b Block) bool {
 	// make sure our highest block is still valid
 	// if not, throw away that block and back track
 	for {
-		matches, peer_block := ns.peerCheckBlock(maxb)
+		matches, peer_block = ns.peerCheckBlock(maxb)
 		if !matches {
 			seq--
 			maxb = BlockChain[seq]
@@ -208,7 +213,7 @@ func (ns *NodeServer) processUnseenBlock(b Block) bool {
 	// now we know everything so far seems valid; fill up our BlockChain upto b.SeqNum - 1
 	seq++
 	for {
-		exists, peer_block := ns.peerRequestBlock(seq)
+		exists, peer_block = ns.peerRequestBlock(seq)
 		if !exists || peer_block.ValidateHash() != nil || peer_block.ValidateTxn() != nil {
 			// can't form a valid block chain, give up
 			return false
@@ -234,11 +239,17 @@ func (ns *NodeServer) processUnseenBlock(b Block) bool {
 
 // Precondition: mMu acquired
 func (ns *NodeServer) peerCheckAndFixBlock(b Block) uint64 {
+	var (
+		peer_block Block
+		matches    bool
+		exists     bool
+	)
+
 	our_block := BlockChain[b.SeqNum]
 	conflict := false
 	seq := b.SeqNum
 	for {
-		matches, peer_block := ns.peerCheckBlock(our_block)
+		matches, peer_block = ns.peerCheckBlock(our_block)
 		if !matches {
 			seq--
 			our_block = BlockChain[seq]
@@ -253,7 +264,7 @@ func (ns *NodeServer) peerCheckAndFixBlock(b Block) uint64 {
 	// if conflicts, seq is the forking position
 	seq++
 	for {
-		exists, peer_block := ns.peerRequestBlock(seq)
+		exists, peer_block = ns.peerRequestBlock(seq)
 		if !exists {
 			break
 		}
@@ -332,7 +343,7 @@ func (ns *NodeServer) WorkOnBlock(pBlock Block) error {
 			b.SetProofOfWork(pBlock.Hash, ns.workerChannel)
 			select {
 			// we found a block in the channel, so continue/start over
-			case pBlock := <-ns.workerChannel:
+			case pBlock = <-ns.workerChannel:
 				continue
 			default:
 				ns.blkQueue.Push(b)

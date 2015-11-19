@@ -92,6 +92,9 @@ func UpdatePublicKey(key rsa.PublicKey, sig []byte, email string) error {
 		return fmt.Errorf("You have never registered for a public key")
 	}
 	jsonBytes, err := json.Marshal(&Transaction{Type: Update, Email: email, PublicKey: key})
+	if err != nil {
+		return err
+	}
 
 	// protocol: user uses SHA256 to hash the transaction
 	hash := sha256.Sum256(jsonBytes)
