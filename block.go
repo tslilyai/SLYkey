@@ -122,7 +122,7 @@ func (b *Block) ValidateHash() error {
 
 	// ensure checksum begins with 28 0s
 	if binary.BigEndian.Uint64(checksum[0:sha256.Size]) > target {
-		return fmt.Errorf("invalid proof of work, hash does not begin with 28 0s")
+		return fmt.Errorf("invalid proof of work, hash does not begin with NumZero 0s")
 	}
 	// ensure that block hash matches hash of parent + proof of work
 	if bytes.Equal(checksum[:], b.Hash[:]) {

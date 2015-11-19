@@ -336,6 +336,9 @@ func (ns *NodeServer) WorkOnBlock(pBlock Block) error {
 				continue
 			default:
 				ns.blkQueue.Push(b)
+				for _, peer := range ns.peers {
+					go ns.SendBlock(peer, b)
+				}
 			}
 		}
 	}
