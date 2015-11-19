@@ -84,8 +84,8 @@ func RegisterPublicKey(key rsa.PublicKey, email string) error {
 
 // Returns error on failure, nil on success
 // Updates a public key, signed by the user
-// signature should be signed on an empty byte hash
-func UpdatePublicKey(key rsa.PublicKey, hashed []byte, sig []byte, email string) error {
+// signature should be signed on JSON-marshalled transaction data
+func UpdatePublicKey(key rsa.PublicKey, sig []byte, email string) error {
 	// value already in map, don't reregister
 	oldKey, ok := Database[email]
 	if !ok {
