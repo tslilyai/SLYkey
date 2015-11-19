@@ -131,30 +131,47 @@ func (b *Block) ValidateHash() error {
 	return nil
 }
 
+// validate the transations in a block, assuming that Database is correct up until this block.
 func (b *Block) ValidateTxn() error {
+	// local copy of the database, keeps track of multiple user transactions in the same block
+	var BlockDatabase map[string]rsa.PublicKey
 	for _, txn := range b.Transactions {
 		// get the bytes to hash
 		jsonBytes, err := json.Marshal(&txn)
-
-		// did not find previous transaction of this user
-		// must be a registration and signed by the CA
-		lastPubKey, ok := Database[txn.Email]
+		lastPubKey, ok := BlockDatabase[txn.Email]
 		if !ok {
-			if txn.Type != Register {
-				return fmt.Errorf("Cannot update a nonexistent public key")
+			// no prior updates to this user in the current block
+			lastPubKey, ok := Database[txn.Email]
+			if !ok {
+				// did not find previous transaction of this user
+				// must be a registration and signed by the CA
+				if txn.Type != Register {
+					return fmt.Errorf("Cannot update a nonexistent public key")
+				}
+				// verify the CA signed this request
+				if err := rsa.VerifyPKCS1v15(&CAKey, crypto.SHA256, jsonBytes, txn.Signature); err != nil {
+					return fmt.Errorf("Not signed by the CA")
+				}
+				BlockDatabase[txn.Email] = txn.PublicKey
+			} else {
+				// else this is an update
+				if err := rsa.VerifyPKCS1v15(&lastPubKey, crypto.SHA256, jsonBytes, txn.Signature); err != nil {
+					if txn.Type != Update {
+						return fmt.Errorf("Cannot register if you already are in the database")
+					}
+					return fmt.Errorf("Signature on new transaction does not match")
+				}
+				BlockDatabase[txn.Email] = txn.PublicKey
 			}
-			// verify the CA signed this request
-			if err := rsa.VerifyPKCS1v15(&CAKey, crypto.SHA256, jsonBytes, txn.Signature); err != nil {
-				return fmt.Errorf("Not signed by the CA")
+		} else {
+			// prior update found in the current block.
+			if err := rsa.VerifyPKCS1v15(&lastPubKey, crypto.SHA256, jsonBytes, txn.Signature); err != nil {
+				if txn.Type != Update {
+					return fmt.Errorf("Cannot register if you already are in the database")
+				}
+				return fmt.Errorf("Signature on new transaction does not match")
 			}
-			return nil
-		}
-		// else this is an update
-		if err := rsa.VerifyPKCS1v15(&lastPubKey, crypto.SHA256, jsonBytes, txn.Signature); err != nil {
-			if txn.Type != Update {
-				return fmt.Errorf("Cannot register if you already are in the database")
-			}
-			return fmt.Errorf("Signature on new transaction does not match")
+			BlockDatabase[txn.Email] = txn.PublicKey
 		}
 	}
 	return nil
